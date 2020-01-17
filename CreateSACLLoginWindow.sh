@@ -35,6 +35,7 @@ secureGroup=""
 # Designed to run as a self service policy for users to secure devices.
 
 loggedInUser=$(/usr/bin/python -c 'from SystemConfiguration import SCDynamicStoreCopyConsoleUser; import sys; username = (SCDynamicStoreCopyConsoleUser(None, None, None) or [None])[0]; username = [username,""][username in [u"loginwindow", None, u""]]; sys.stdout.write(username + "\n");')
+currentUID=$(dscl . read /Users/$loggedInUser UniqueID | awk '{print $2}')
 
 
 # Must be run as Root
@@ -45,7 +46,7 @@ if [[ "$(/usr/bin/id -u)" != "0" ]] ; then
 fi
 
 userSummary() {
-theResult=$(launchctl "asuser" "USER_ID" /usr/bin/osascript <<EOF
+theResult=$(launchctl "asuser" "$currentUID" /usr/bin/osascript <<EOF
 set theimage to POSIX file "/tmp/SCBIcon.png" as alias
 display dialog "${1}" buttons {"No","Yes"} default button 2 with title "${2}" with icon theimage
 return button returned of result
@@ -67,7 +68,7 @@ if [[ ${theResult} == "Yes" ]];then
 fi
 
 while [[ -z $secureUser ]];do
-        secureUser="$(launchctl "asuser" "USER_ID" osascript -e 'display dialog "Please enter the AD Username to assign this computer to:" default answer "" with title "Enduser AD name" with text buttons {"Ok"} default button 1' -e 'text returned of result')"
+        secureUser="$(launchctl "asuser" "$currentUID" osascript -e 'display dialog "Please enter the AD Username to assign this computer to:" default answer "" with title "Enduser AD name" with text buttons {"Ok"} default button 1' -e 'text returned of result')"
         if [[ $? -ne 0 ]]; then 
                 exit 0
         fi
@@ -76,7 +77,7 @@ while [[ -z $secureUser ]];do
                 #        if [[ "$secureUser" =~ [^a-zA-Z0-9.-] ]]; then
         echo "NOTICE: argument contains an illegal character" >&2
         secureUser=""
-                buttonReturned="$(launchctl "asuser" "USER_ID" osascript -e 'display dialog "Please ensure no Spaces or illegal characters are entered." with title "Error with ID Entered" with text buttons {"Cancel","Try Again"} default button 2' -e 'button returned of result')"
+                buttonReturned="$(launchctl "asuser" "$currentUID" osascript -e 'display dialog "Please ensure no Spaces or illegal characters are entered." with title "Error with ID Entered" with text buttons {"Cancel","Try Again"} default button 2' -e 'button returned of result')"
                 
                 if [[ $buttonReturned == "Cancel" ]]; then 
                         exit 0
@@ -86,14 +87,14 @@ done
 
 # If the machine is not bound to AD, then there's no purpose going any further.
 if [[ "${check4AD}" != "Active Directory" ]]; then
-        launchctl "asuser" "USER_ID" osascript -e 'Tell application "System Events" to display dialog  "This machine is not bound to Active Directory. Please bind to AD first." with title "Device not Bound To AD" with text buttons {"Cancel"} default button 1'
+        launchctl "asuser" "$currentUID" osascript -e 'Tell application "System Events" to display dialog  "This machine is not bound to Active Directory. Please bind to AD first." with title "Device not Bound To AD" with text buttons {"Cancel"} default button 1'
         exit 1
 fi
 
 # Lookup a domain account and check exit code for error
 /usr/bin/id -u "${secureUser}"
 if [[ $? -ne 0 ]]; then
-        launchctl "asuser" "USER_ID" osascript -e 'Tell application "System Events" to display dialog  "It doesn not look like this Mac is communicating with AD correctly. Exiting the script." with title "Error with AD Communication" with text buttons {"Cancel"} default button 1'
+        launchctl "asuser" "$currentUID" osascript -e 'Tell application "System Events" to display dialog  "It doesn not look like this Mac is communicating with AD correctly. Exiting the script." with title "Error with AD Communication" with text buttons {"Cancel"} default button 1'
         exit 1
 fi
 
